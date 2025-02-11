@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Résultats des Examens</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            text-align: center;
+            padding: 20px;
+        }
+        table {
+            margin-top: 20px;
+            width: 80%;
+            margin: auto;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+        th {
+            background-color: #4c6faf;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        input[type="text"] {
+            padding: 10px;
+            width: 200px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4c54af;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .answers-table {
+            margin-top: 30px;
+            text-align: left;
+            width: 90%;
+            margin: auto;
+            border-collapse: collapse;
+        }
+        .answers-table th, .answers-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+        .answers-table th {
+            background-color: #4c5caf;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Résultats des Examens</h1>
+    <p>Entrez votre numéro d'anonymat pour consulter vos résultats :</p>
+    
+    <input type="text" id="studentID" placeholder="Numéro d'anonymat">
+    <button onclick="searchResults()">Consulter mes résultats</button>
+
+    <div id="result"></div>
+
+    <script>
+        // Lien vers ton fichier CSV Google Sheets (ce fichier doit être public)
+        const csvUrl = "https://raw.githubusercontent.com/dapparu/resultats-examen/refs/heads/main/Examen%20blanc%20BIOMEDAL%20-%20Sheet1.csv";
+
+        function searchResults() {
+            const studentID = document.getElementById("studentID").value;
+            if (!studentID) {
+                alert("Veuillez entrer un numéro d'anonymat.");
+                return;
+            }
+
+            console.log("Tentative de récupération des résultats pour le numéro d'anonymat : ", studentID);
+
+            fetch(csvUrl)
+                .then(response => response.text())
+                .then(data => {
+                    console.log("Données CSV récupérées : ", data); // Afficher les données CSV dans la console pour voir si elles sont bien récupérées
+                    const rows = data.split("\n");
+                    let resultFound = false;
+                    let studentName = "";
+                    let note1 = 0;
+                    let note2 = 0;
+                    let studentRank = "";
+                    let studentAvg = 0;
+                    let studentAnswers = [];
+                    let classNotes1 = [];
+                    let classNotes2 = [];
+                    let allAnswers = [];
+
+                    rows.forEach((row, index) => {
+                        if (index === 0) return; // Ignore la première ligne (en-têtes)
+                        const columns = row.split(",");
+                        
+                        // Si la première colonne (Numéro d'anonymat) correspond à celui de l'étudiant
+                        if (columns[0] === studentID) {
+                            studentName = columns[1]; // Nom de l'étudiant
+                            note1 = parseFloat(columns[2]); // Note 1
+                            note2 = parseFloat(columns[3]); // Note 2
+                            studentAvg = parseFloat(columns[4]); // Moyenne de l'étudiant
+                            studentRank = columns[5]; // Rang de l'étudiant
+                            
+                            // Récupère les réponses des QCM
+                            studentAnswers = columns.slice(6, 8); // Les réponses aux 60 QCM
+                            resultFound = true;
+                        }
+
+                        // Collecte des notes de la classe pour les calculs statistiques
+                        classNotes1.push(parseFloat(columns[2]));
+                        classNotes2.push(parseFloat(columns[3]));
+                        allAnswers.push(columns.slice(6, 8)); // Collecte les réponses des QCM pour la classe
+                    });
+
+                    const resultDiv = document.getElementById("result");
+                    if (resultFound) {
+                        // Calculer la moyenne de la classe et l'écart-type pour chaque note
+                        const classAvg1 = calculateAverage(classNotes1);
+                        const classAvg2 = calculateAverage(classNotes2);
+                        const classStdDev1 = calculateStdDev(classNotes1, classAvg1);
+                        const classStdDev2 = calculateStdDev(classNotes2, classAvg2);
+
+                        // Afficher les résultats de l'étudiant
+                        resultDiv.innerHTML = `
+                            <h2>Résultats pour ${studentName}</h2>
+                            <p><strong>Note 1</strong> : ${note1}/20</p>
+                            <p><strong>Note 2</strong> : ${note2}/20</p>
+                            <p><strong>Moyenne</strong> : ${studentAvg}/20</p>
+                            <p><strong>Rang</strong> : ${studentRank}</p>
+                            <p><strong>Moyenne générale de la classe (Note 1)</strong> : ${classAvg1.toFixed(2)}/20</p>
+                            <p><strong>Moyenne générale de la classe (Note 2)</strong> : ${classAvg2.toFixed(2)}/20</p>
+                            <p><strong>Écart-type (Note 1)</strong> : ${classStdDev1.toFixed(2)}</p>
+                            <p><strong>Écart-type (Note 2)</strong> : ${classStdDev2.toFixed(2)}</p>
+                        `;
+
+                        // Afficher les réponses des QCM
+                        resultDiv.innerHTML += "<h3>Vos réponses aux 60 QCM</h3>";
+                        resultDiv.innerHTML += "<table class='answers-table'><tr><th>QCM</th><th>Réponse</th></tr>";
+                        studentAnswers.forEach((answer, index) => {
+                            resultDiv.innerHTML += `<tr><td>QCM ${index + 1}</td><td>${answer}</td></tr>`;
+                        });
+                        resultDiv.innerHTML += "</table>";
+
+                    } else {
+                        resultDiv.innerHTML = "<p>Aucun résultat trouvé pour ce numéro d'anonymat.</p>";
+                    }
+                })
+                .catch(error => {
+                    console.error("Erreur lors de la récupération des résultats : ", error);
+                    alert("Une erreur est survenue lors de la récupération des résultats.");
+                });
+        }
+
+        function calculateAverage(notes) {
+            const total = notes.reduce((acc, note) => acc + note, 0);
+            return total / notes.length;
+        }
+
+        function calculateStdDev(notes, mean) {
+            const variance = notes.reduce((acc, note) => acc + Math.pow(note - mean, 2), 0) / notes.length;
+            return Math.sqrt(variance);
+        }
+    </script>
+
+</body>
+</html>
